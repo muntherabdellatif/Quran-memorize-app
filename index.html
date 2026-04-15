@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Widget حفظ القرآن</title>
+    <style>
+        :root { --primary: #1b5e20; --bg: #f4f7f6; --white: #ffffff; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); display: flex; justify-content: center; padding: 10px; }
+        .widget-container { background: var(--white); padding: 20px; border-radius: 25px; box-shadow: 0 8px 30px rgba(0,0,0,0.08); width: 100%; max-width: 420px; }
+        
+        /* تصميم المربعات العلوية (Display) */
+        .info-board { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+        .info-card { background: #f1f8e9; padding: 10px; border-radius: 15px; text-align: center; border: 1px solid #dcedc8; }
+        .info-card.dark { background: #e8f5e9; }
+        .label { display: block; font-size: 0.7rem; color: #555; margin-bottom: 2px; }
+        .value { display: block; font-size: 1.1rem; font-weight: bold; color: var(--primary); }
+
+        /* منطقة المدخلات */
+        .settings { border-top: 2px dashed #eee; padding-top: 15px; margin-top: 15px; }
+        .input-group { margin-bottom: 10px; }
+        label { font-size: 0.8rem; font-weight: bold; color: #333; }
+        input, select { width: 100%; padding: 8px; margin-top: 4px; border-radius: 10px; border: 1px solid #ddd; box-sizing: border-box; }
+        
+        button { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; margin-top: 10px; transition: 0.3s; }
+        button:active { transform: scale(0.98); }
+
+        .message { text-align: center; padding: 10px; border-radius: 10px; margin: 10px 0; font-size: 0.85rem; font-weight: bold; }
+        .ahead { background: #c8e6c9; color: #1b5e20; }
+        .behind { background: #ffcdd2; color: #b71c1c; }
+    </style>
+</head>
+<body>
+
+<div class="widget-container">
+    <h3 style="text-align:center; color:var(--primary); margin-top:0;">📊 ملخص الحفظ</h3>
+    
+    <div class="info-board">
+        <div class="info-card">
+            <span class="label">تاريخ البدء</span>
+            <span class="value" id="viewStartDate">-</span>
+        </div>
+        <div class="info-card">
+            <span class="label">الهدف اليومي</span>
+            <span class="value" id="viewDailyGoal">-</span>
+        </div>
+        <div class="info-card dark">
+            <span class="label">أيام مضت</span>
+            <span class="value" id="viewDaysPassed">0</span>
+        </div>
+        <div class="info-card dark">
+            <span class="label">أيام متبقية</span>
+            <span class="value" id="viewDaysLeft">0</span>
+        </div>
+        <div class="info-card" style="border: 2px solid #81c784;">
+            <span class="label">الصفحة المتوقعة</span>
+            <span class="value" id="viewExpected">0</span>
+        </div>
+        <div class="info-card" style="border: 2px solid #81c784;">
+            <span class="label">حفظك الحالي</span>
+            <span class="value" id="viewCurrent">0</span>
+        </div>
+    </div>
+
+    <div id="statusMsg" class="message">أدخل بياناتك للبدء</div>
+
+    <div class="settings">
+        <div class="input-group">
+            <label>كم كنت تحفظ عند البدء؟ (صفحة)</label>
+            <input type="number" id="inStartPages" value="0" oninput="runLogic()">
+        </div>
+        <div class="input-group">
+            <label>كم تحفظ الآن؟ (صفحة)</label>
+            <input type="number" id="inCurrentPages" value="0" oninput="runLogic()">
+        </div>
+        <div class="input-group">
+            <label>تاريخ بداية البرنامج:</label>
+            <input type="date" id="inStartDate" onchange="runLogic()">
+        </div>
+        <div class="input-group">
+            <label>مقدار الحفظ اليومي:</label>
+            <select id="inDailyGoal" onchange="runLogic()">
+                <option value="0.5">0.5 (نصف صفحة)</option>
+                <option value="1">1 (صفحة واحدة)</option>
+                <option value="2">2 (صفحتين)</option>
+            </select>
+        </div>
+        <button onclick="saveData()">💾 حفظ في ذاكرة الهاتف</button>
+    </div>
+</div>
+
+<script>
+    // استرجاع البيانات عند فتح التطبيق
+    window.onload = () => {
+        const data = JSON.parse(localStorage.getItem('quran_pro_data'));
+        if (data) {
+            document.getElementById('inStartPages').value = data.start;
+            document.getElementById('inCurrentPages').value = data.current;
+            document.getElementById('inStartDate').value = data.date;
+            document.getElementById('inDailyGoal').value = data.goal;
+            runLogic();
+        }
+    };
+
+    function runLogic() {
+        // المدخلات
+        const startPages = parseFloat(document.getElementById('inStartPages').value) || 0;
+        const currentPages = parseFloat(document.getElementById('inCurrentPages').value) || 0;
+        const dateStr = document.getElementById('inStartDate').value;
+        const goal = parseFloat(document.getElementById('inDailyGoal').value);
+
+        if (!dateStr) return;
+
+        const startDate = new Date(dateStr);
+        const today = new Date();
+        
+        // 1. حساب الأيام
+        const diffDays = Math.max(0, Math.floor((today - startDate) / (1000 * 60 * 60 * 24)));
+
+        // 2. الحسابات (المتوقعة والمتبقية)
+        const expected = startPages + (diffDays * goal);
+        const pagesLeft = 604 - currentPages;
+        const daysLeft = pagesLeft > 0 ? Math.ceil(pagesLeft / goal) : 0;
+
+        // 3. تحديث العرض العلوي (UI)
+        document.getElementById('viewStartDate').innerText = dateStr;
+        document.getElementById('viewDailyGoal').innerText = goal + " صفحة";
+        document.getElementById('viewDaysPassed').innerText = diffDays;
+        document.getElementById('viewDaysLeft').innerText = daysLeft;
+        document.getElementById('viewExpected').innerText = expected.toFixed(1);
+        document.getElementById('viewCurrent').innerText = currentPages;
+
+        // 4. رسالة الحالة التفاعلية
+        const msg = document.getElementById('statusMsg');
+        const diff = currentPages - expected;
+        if (diff >= 0) {
+            msg.innerText = "🎉 ممتاز! أنت سابق بـ " + diff.toFixed(1) + " صفحة";
+            msg.className = "message ahead";
+        } else {
+            msg.innerText = "⚠️ تنبيه: متأخر بـ " + Math.abs(diff).toFixed(1) + " صفحة";
+            msg.className = "message behind";
+        }
+    }
+
+    function saveData() {
+        const data = {
+            start: document.getElementById('inStartPages').value,
+            current: document.getElementById('inCurrentPages').value,
+            date: document.getElementById('inStartDate').value,
+            goal: document.getElementById('inDailyGoal').value
+        };
+        localStorage.setItem('quran_pro_data', JSON.stringify(data));
+        alert("تم حفظ البيانات بنجاح!");
+    }
+</script>
+
+</body>
+</html>
